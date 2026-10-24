@@ -1,0 +1,1 @@
+Network security uses defense in depth: authenticate users, authorize each action, validate inputs, and audit sensitive operations. An LLM must not choose its own privileges.

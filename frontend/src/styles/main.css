@@ -1,0 +1,659 @@
+:root {
+  font-family:
+    Inter,
+    Segoe UI,
+    system-ui,
+    sans-serif;
+  color: #1a2c40;
+  background: #f3f5f8;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  border: 0;
+  border-radius: 8px;
+  background: #174c45;
+  color: white;
+  padding: 12px 18px;
+  font-weight: 600;
+}
+button:hover {
+  filter: brightness(1.08);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+input,
+textarea,
+select {
+  border: 1px solid #d9e0e6;
+  border-radius: 8px;
+  padding: 12px;
+  background: white;
+  color: #1a2c40;
+}
+input:focus,
+textarea:focus {
+  outline: 2px solid #65a99d;
+  outline-offset: 2px;
+}
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+h1 {
+  font-size: 28px;
+  letter-spacing: -1px;
+  margin-bottom: 8px;
+}
+p {
+  line-height: 1.6;
+  color: #637286;
+}
+small {
+  font-size: 12px;
+  color: #6c7c8e;
+}
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 1.7px;
+  font-weight: 700;
+  color: #607b7b;
+  display: block;
+  margin-bottom: 15px;
+}
+.login {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+}
+.intro {
+  background: #123d39;
+  color: white;
+  padding: 70px 12%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.intro h1 {
+  font-size: clamp(26px, 3vw, 40px);
+  line-height: 1.2;
+  letter-spacing: -0.7px;
+  margin-bottom: 18px;
+  overflow-wrap: break-word;
+}
+.intro .hero-subtitle {
+  color: #e0ece8;
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.5;
+  margin: 0 0 18px;
+}
+.intro .hero-supporting {
+  color: #b8ceca;
+  font-size: 13px;
+  line-height: 1.8;
+  max-width: 460px;
+  margin: 0;
+}
+.login-card {
+  width: min(440px, 85%);
+  margin: auto;
+  padding: 48px 0;
+}
+.login-card h2 {
+  font-size: 26px;
+}
+.login-card label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 22px 0;
+}
+.login-card input {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+.login-card > button {
+  width: 100%;
+  margin: 8px 0 24px;
+}
+.login-card small {
+  display: block;
+}
+.account-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.secondary {
+  background: #f0f4f5;
+  color: #3c5a65;
+  border: 1px solid #dce4e7;
+  font-size: 12px;
+  padding: 9px 13px;
+}
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar {
+  width: 238px;
+  flex-shrink: 0;
+  background: #fff;
+  border-right: 1px solid #e0e5eb;
+  padding: 34px 23px;
+  display: flex;
+  flex-direction: column;
+}
+.subtitle {
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  margin: 8px 0 45px;
+}
+.sidebar nav {
+  display: grid;
+  gap: 8px;
+}
+.sidebar nav button {
+  background: transparent;
+  color: #6b7888;
+  text-align: left;
+  padding: 13px;
+  font-size: 13px;
+}
+.sidebar nav button.active {
+  color: #174c45;
+  background: #eaf3ef;
+}
+.identity {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 50px;
+}
+.identity .badge {
+  align-self: flex-start;
+}
+.workspace {
+  padding: 36px;
+  flex: 1;
+  min-width: 0;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+header .eyebrow {
+  margin-bottom: 9px;
+}
+.badge {
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  background: #eaf0f2;
+  color: #4c6373;
+  border-radius: 5px;
+  padding: 5px 8px;
+  white-space: nowrap;
+  display: inline-block;
+}
+.badge.allow,
+.badge.approved {
+  background: #e2f3eb;
+  color: #24765c;
+}
+.badge.block,
+.badge.rejected {
+  background: #fce9e8;
+  color: #b44646;
+}
+.badge.require_approval,
+.badge.pending {
+  background: #fff0d7;
+  color: #956a24;
+}
+.chat-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 285px;
+  gap: 22px;
+}
+.card {
+  background: white;
+  border: 1px solid #e0e6ed;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 22px;
+  border-bottom: 1px solid #edf0f4;
+  font-size: 13px;
+  gap: 10px;
+}
+.card-title small {
+  font-size: 10px;
+}
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 640px;
+}
+.messages {
+  padding: 25px;
+  flex: 1;
+  max-height: 65vh;
+  overflow: auto;
+}
+.welcome {
+  text-align: center;
+  margin: 65px auto 30px;
+  max-width: 430px;
+}
+.welcome h2 {
+  font-size: 23px;
+}
+.welcome p {
+  font-size: 13px;
+}
+.icon {
+  display: block;
+  font-size: 44px;
+  color: #508578;
+  margin-bottom: 25px;
+}
+.suggestions {
+  display: grid;
+  gap: 8px;
+  margin-top: 30px;
+}
+.suggestions button {
+  text-align: left;
+  font-size: 11px;
+  background: white;
+}
+.composer {
+  display: flex;
+  gap: 10px;
+  padding: 18px;
+  border-top: 1px solid #edf0f4;
+  align-items: center;
+}
+.composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 65px;
+  font-size: 12px;
+}
+.composer button {
+  white-space: nowrap;
+}
+.message {
+  margin-bottom: 20px;
+  padding: 15px;
+  border-radius: 10px;
+  background: #f2f6f5;
+}
+.message.you {
+  background: #f4f6fa;
+  margin-left: 30px;
+}
+.message pre {
+  font-family: inherit;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+  margin-bottom: 8px;
+}
+.security-panel {
+  align-self: start;
+  padding-bottom: 22px;
+}
+.live {
+  font-size: 10px;
+  color: #418d75;
+}
+.score {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  margin: 30px 0 15px;
+}
+.score strong {
+  font-size: 53px;
+  letter-spacing: -3px;
+}
+.score span {
+  font-size: 11px;
+  color: #8995a3;
+}
+.meter {
+  margin: 0 24px 25px;
+  height: 5px;
+  background: #ecf0f3;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.meter div {
+  height: 100%;
+  background: #d7a458;
+}
+.detail {
+  padding: 13px 23px;
+  border-top: 1px solid #f0f2f5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.detail strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.note {
+  background: #f5f7f9;
+  padding: 15px;
+  margin: 15px 22px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+.security-panel > small {
+  display: block;
+  margin: 0 23px;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 25px;
+}
+.metric {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.metric strong {
+  font-size: 32px;
+}
+.filters {
+  display: flex;
+  gap: 10px;
+  padding: 20px;
+}
+.filters select {
+  font-size: 12px;
+  max-width: 32%;
+}
+.table-wrap {
+  overflow-x: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 11px;
+  text-align: left;
+}
+td,
+th {
+  padding: 13px 15px;
+  border-bottom: 1px solid #edf0f4;
+}
+th {
+  font-size: 10px;
+  color: #7b8795;
+  background: #f9fafb;
+}
+.approval {
+  display: flex;
+  justify-content: space-between;
+  padding: 25px;
+  border-top: 1px solid #edf0f4;
+  gap: 20px;
+}
+.approval h3 {
+  font-size: 16px;
+}
+.approval p {
+  font-size: 12px;
+}
+.approval pre {
+  background: #f5f7f9;
+  padding: 15px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  align-self: center;
+}
+.empty {
+  padding: 35px;
+  text-align: center;
+}
+.analysis {
+  padding: 25px;
+  margin-top: 20px;
+}
+.analysis p {
+  font-size: 13px;
+}
+.error {
+  background: #fcebea;
+  color: #a33434;
+  padding: 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 15px;
+}
+footer {
+  font-size: 10px;
+  color: #97a1ae;
+  margin-top: 24px;
+}
+@media (max-width: 1100px) {
+  .chat-grid {
+    grid-template-columns: 1fr;
+  }
+  .workspace {
+    padding: 24px;
+  }
+  .sidebar {
+    width: 200px;
+  }
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .login {
+    grid-template-columns: 1fr;
+  }
+  .intro {
+    padding: 35px;
+  }
+  .shell {
+    display: block;
+  }
+  .sidebar {
+    width: 100%;
+    padding: 18px;
+  }
+  .sidebar nav {
+    display: flex;
+    overflow: auto;
+  }
+  .subtitle {
+    margin-bottom: 12px;
+  }
+  .identity {
+    margin: 0;
+    padding-top: 15px;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .identity small {
+    display: none;
+  }
+  .workspace {
+    padding: 18px;
+  }
+  header h1 {
+    font-size: 22px;
+  }
+  header .eyebrow {
+    font-size: 8px;
+  }
+  .chat {
+    min-height: 550px;
+  }
+  .card-title small {
+    display: none;
+  }
+  .chat-grid {
+    gap: 15px;
+  }
+  .approval {
+    flex-direction: column;
+  }
+}
+
+/* Shared branding preserves the supplied artwork, colors, and aspect ratio. */
+.esigelec-brand {
+  display: flex;
+  align-items: center;
+  width: var(--brand-width);
+  max-width: 100%;
+  min-width: 0;
+}
+.esigelec-brand--small {
+  --brand-width: 120px;
+  --brand-font: 18px;
+}
+.esigelec-brand--medium {
+  --brand-width: 180px;
+  --brand-font: 24px;
+}
+.esigelec-brand--large {
+  --brand-width: 230px;
+  --brand-font: 28px;
+}
+.esigelec-brand img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+.esigelec-brand__fallback {
+  color: #064779;
+  font-size: var(--brand-font);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+.login-card > .esigelec-brand {
+  margin-bottom: 32px;
+}
+.login-card h2 {
+  margin-bottom: 10px;
+}
+.page-subtitle {
+  margin: 0;
+  font-size: 12px;
+}
+.identity-label {
+  display: block;
+  color: #6c7c8e;
+  font-size: 10px;
+  font-weight: 400;
+  margin-bottom: 5px;
+}
+header {
+  gap: 16px;
+  flex-wrap: wrap;
+}
+header > div {
+  min-width: 0;
+}
+.sidebar .subtitle {
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  line-height: 1.6;
+  margin-top: 16px;
+}
+@media (max-width: 700px) {
+  .esigelec-brand--medium {
+    --brand-width: 150px;
+  }
+  .esigelec-brand--large {
+    --brand-width: 190px;
+  }
+  .intro {
+    padding: 28px 24px;
+  }
+  .intro h1 {
+    font-size: 26px;
+    margin-bottom: 14px;
+  }
+  .intro .hero-subtitle {
+    font-size: 17px;
+    margin-bottom: 14px;
+  }
+  .intro .hero-supporting {
+    font-size: 12px;
+  }
+  .login-card {
+    padding: 32px 0;
+  }
+  .login-card > .esigelec-brand {
+    margin-bottom: 24px;
+  }
+  .sidebar nav {
+    flex-wrap: wrap;
+    overflow: visible;
+    gap: 6px;
+  }
+  .sidebar nav button {
+    padding: 10px 11px;
+  }
+  .identity {
+    gap: 10px;
+  }
+  .identity-label {
+    display: inline;
+    margin-right: 7px;
+  }
+  .account-buttons {
+    flex-wrap: wrap;
+  }
+  .page-subtitle {
+    font-size: 11px;
+  }
+  .composer textarea {
+    min-width: 0;
+  }
+}
