@@ -1,42 +1,30 @@
 import re
 
 from app.llm.agent import normalize
-from app.security.risk_engine import assessment
+from app.security.detection import DetectionContext, prepare, run_detectors
+from app.security.risk_engine import assessment, evaluate
 
-PATTERNS = [
-    (
-        "PROMPT_INJECTION",
-        88,
-        r"(ignore|forget|oublie|ne tiens pas compte).{0,70}(instruction|regle|rule|previous|precedent)",
-        "Attempt to override application instructions.",
-    ),
-    (
-        "ROLE_MANIPULATION",
-        90,
-        r"(i am|you are now|act as|je suis|tu es|agis comme).{0,30}(admin|administrateur)",
-        "Prompt cannot change the authenticated role.",
-    ),
-    (
-        "JAILBREAK",
-        80,
-        r"(restriction|safeguard|regle|rule).{0,50}(desactiv|disable)|sans (regles|restriction)|without (rules|restriction)|bypass.{0,20}safeguard",
-        "Attempt to disable safeguards.",
-    ),
-    (
-        "INFORMATION_LEAKAGE",
-        90,
-        r"(system.{0,10}prompt|internal instruction|instructions? (interne|systeme)|donnees privees|private.{0,20}(professor|data)|api.?key|mot de passe|password)",
-        "Request for protected information.",
-    ),
-]
+# Below this many characters there is nothing meaningful to analyse.
+MIN_ANALYSIS_CHARS = 1
 
 
-def analyze_input(prompt, user_context=None):
-    normalized = normalize(prompt)
-    for threat, score, pattern, reason in PATTERNS:
-        if re.search(pattern, normalized):
-            return assessment(threat, score, reason)
-    return assessment()
+def analyze_input(prompt, user_context=None, source="user_prompt", recent_blocks=0):
+    """Multilayer, deterministic analysis of text entering the agent.
+
+    Pipeline: secure normalization -> eight complementary detectors (with
+    mention-versus-use framing) -> centralized risk engine. No LLM call is made,
+    so the guard keeps working when Gemini is unavailable.
+    """
+    text = prepare(prompt)
+    if len(text.normalized) < MIN_ANALYSIS_CHARS:
+        result = assessment(reason="Empty input; nothing to analyse.")
+        result["normalization"] = text.flags
+        return result
+    role = getattr(user_context, "role", None)
+    signals = run_detectors(text, DetectionContext(source=source, role=role))
+    result = evaluate(signals, source_trust=source, recent_blocks=recent_blocks)
+    result["normalization"] = {k: v for k, v in text.flags.items() if v}
+    return result
 
 
 def analyze_unfulfilled_action(prompt, user):
@@ -46,7 +34,10 @@ def analyze_unfulfilled_action(prompt, user):
         r"\b(change|modifie|deplace|update|move)\b.{0,100}\b(salle|room|cours|course|schedule|emploi)\b",
         normalize(prompt),
     ):
-        return assessment(
-            "TOOL_ABUSE", 95, "Authenticated role cannot modify schedules."
+        return evaluate(
+            authorization_denied=True,
+            threat="TOOL_ABUSE",
+            reason="Authenticated role cannot modify schedules.",
+            potential_impact="HIGH",
         )
     return assessment()
