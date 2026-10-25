@@ -158,6 +158,7 @@ def test_incident_recorded_even_when_gemini_down(client, headers, monkeypatch):
     ],
 )
 def test_transport_errors_fail_once_without_retry(monkeypatch, outcome, expected):
+    monkeypatch.setattr(gemini_client, "GEMINI_FALLBACK_MODELS", [])
     posts = []
 
     def post(url, headers, json, timeout):
@@ -173,3 +174,52 @@ def test_transport_errors_fail_once_without_retry(monkeypatch, outcome, expected
     assert exc.value.status_code == expected
     assert "quota" not in str(exc.value) and "boom" not in str(exc.value)
     assert len(posts) == 1
+
+
+def _scripted_post(monkeypatch, outcomes):
+    """Replace httpx.post with per-model scripted outcomes; return called models."""
+    called = []
+
+    def post(url, headers, json, timeout):
+        model = url.split("/models/")[1].split(":")[0]
+        called.append(model)
+        outcome = outcomes[model]
+        if isinstance(outcome, Exception):
+            raise outcome
+        outcome.request = httpx.Request("POST", url)
+        return outcome
+
+    monkeypatch.setattr(gemini_client.httpx, "post", post)
+    monkeypatch.setattr(gemini_client, "GEMINI_MODEL", "primary")
+    monkeypatch.setattr(gemini_client, "GEMINI_FALLBACK_MODELS", ["backup", "last"])
+    return called
+
+
+OK = {"candidates": [{"content": {"parts": [{"text": "OK"}]}}]}
+
+
+@pytest.mark.parametrize(
+    "failure", [httpx.Response(503, json={}), httpx.ReadTimeout("t")]
+)
+def test_busy_model_falls_back_once_per_model(monkeypatch, failure):
+    called = _scripted_post(
+        monkeypatch, {"primary": failure, "backup": httpx.Response(200, json=OK)}
+    )
+    assert gemini_client.generate([], "STUDENT")["parts"][0]["text"] == "OK"
+    assert called == ["primary", "backup"]
+
+
+@pytest.mark.parametrize("status", [429, 400, 401, 403, 404])
+def test_quota_and_client_errors_do_not_fall_back(monkeypatch, status):
+    called = _scripted_post(monkeypatch, {"primary": httpx.Response(status, json={})})
+    with pytest.raises(gemini_client.LLMUnavailable):
+        gemini_client.generate([], "STUDENT")
+    assert called == ["primary"]
+
+
+def test_all_models_busy_fails_closed(monkeypatch):
+    busy = httpx.Response(503, json={})
+    called = _scripted_post(monkeypatch, {"primary": busy, "backup": busy, "last": busy})
+    with pytest.raises(gemini_client.LLMUnavailable) as exc:
+        gemini_client.generate([], "STUDENT")
+    assert exc.value.status_code == 503 and called == ["primary", "backup", "last"]

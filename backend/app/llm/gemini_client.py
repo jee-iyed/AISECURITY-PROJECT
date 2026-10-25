@@ -4,7 +4,12 @@ from datetime import date
 import httpx
 
 from app.core import rate_limit
-from app.core.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT_SECONDS
+from app.core.config import (
+    GEMINI_API_KEY,
+    GEMINI_FALLBACK_MODELS,
+    GEMINI_MODEL,
+    GEMINI_TIMEOUT_SECONDS,
+)
 from app.llm.system_prompt import SYSTEM_PROMPT
 
 log = logging.getLogger("gateway.gemini")
@@ -16,6 +21,7 @@ class LLMUnavailable(Exception):
     def __init__(self, message="Gemini unavailable", status_code=None):
         super().__init__(message)
         self.status_code = status_code
+        self.unexpected = False
 
     @property
     def rate_limited(self):
@@ -28,13 +34,6 @@ def generate(
     declarations: list | None = None,
     generation_config: dict | None = None,
 ) -> dict:
-    try:
-        # Process-wide budget protects the quota from bursts; exceeding it is
-        # handled exactly like a provider 429 (fail closed, no retry).
-        rate_limit.check("gemini", "global")
-    except rate_limit.RateLimited as exc:
-        raise LLMUnavailable("Local Gemini call budget exhausted", 429) from exc
-
     payload = {
         "systemInstruction": {
             "parts": [
@@ -60,11 +59,33 @@ def generate(
     if declarations:
         payload["tools"] = [{"functionDeclarations": declarations}]
 
+    # A busy model (503 "high demand", 5xx, timeout) falls through to the next
+    # configured model, each tried at most once. Quota errors (429), auth and
+    # request errors are not model-specific and fail immediately.
+    models = [GEMINI_MODEL, *(m for m in GEMINI_FALLBACK_MODELS if m != GEMINI_MODEL)]
+    for index, model in enumerate(models):
+        try:
+            return _call(model, payload)
+        except LLMUnavailable as exc:
+            transient = exc.status_code is None or exc.status_code >= 500
+            if not transient or exc.unexpected or index == len(models) - 1:
+                raise
+            log.warning("Gemini model %s unavailable; trying %s", model, models[index + 1])
+
+
+def _call(model: str, payload: dict) -> dict:
+    try:
+        # Process-wide budget protects the quota from bursts; exceeding it is
+        # handled exactly like a provider 429 (fail closed, no retry).
+        rate_limit.check("gemini", "global")
+    except rate_limit.RateLimited as exc:
+        raise LLMUnavailable("Local Gemini call budget exhausted", 429) from exc
+
     try:
         response = httpx.post(
             (
                 "https://generativelanguage.googleapis.com/"
-                f"v1beta/models/{GEMINI_MODEL}:generateContent"
+                f"v1beta/models/{model}:generateContent"
             ),
             headers={"x-goog-api-key": GEMINI_API_KEY},
             json=payload,
@@ -95,4 +116,6 @@ def generate(
 
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         log.warning("Gemini returned an unexpected response shape")
-        raise LLMUnavailable("Gemini returned an unexpected response.") from exc
+        error = LLMUnavailable("Gemini returned an unexpected response.")
+        error.unexpected = True  # a malformed reply is not a busy model
+        raise error from exc
