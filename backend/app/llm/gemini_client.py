@@ -1,4 +1,7 @@
 import logging
+import re
+import threading
+import time
 from datetime import date
 
 import httpx
@@ -14,6 +17,30 @@ from app.llm.system_prompt import SYSTEM_PROMPT
 
 log = logging.getLogger("gateway.gemini")
 
+# A model that is overloaded or out of its own quota is skipped for a while
+# instead of being called again on every request.
+BUSY_COOLDOWN_SECONDS = 60
+QUOTA_COOLDOWN_DEFAULT = 3600
+QUOTA_COOLDOWN_MAX = 24 * 3600
+_benched: dict[str, float] = {}
+_bench_lock = threading.Lock()
+
+
+def reset_model_health():
+    """Forget benched models (tests, or after changing the configuration)."""
+    with _bench_lock:
+        _benched.clear()
+
+
+def _bench(model, seconds):
+    with _bench_lock:
+        _benched[model] = time.monotonic() + seconds
+
+
+def _available(model):
+    with _bench_lock:
+        return _benched.get(model, 0) <= time.monotonic()
+
 
 class LLMUnavailable(Exception):
     """Provider failure. Never retried here: callers fail closed instead."""
@@ -22,6 +49,10 @@ class LLMUnavailable(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.unexpected = False
+        # Set when a 429 concerns only this model's quota (another model still
+        # has its own quota); retry_after comes from the provider's retryDelay.
+        self.model_quota = False
+        self.retry_after = None
 
     @property
     def rate_limited(self):
@@ -59,18 +90,50 @@ def generate(
     if declarations:
         payload["tools"] = [{"functionDeclarations": declarations}]
 
-    # A busy model (503 "high demand", 5xx, timeout) falls through to the next
-    # configured model, each tried at most once. Quota errors (429), auth and
-    # request errors are not model-specific and fail immediately.
-    models = [GEMINI_MODEL, *(m for m in GEMINI_FALLBACK_MODELS if m != GEMINI_MODEL)]
+    # Each configured model is tried at most once per request, never in a loop.
+    # Fall through to the next model when this one is busy (503, 5xx,
+    # timeout) or out of its *own* quota (free-tier quotas are per model and
+    # per day). Project-wide or local rate limits, auth and request errors are
+    # not model-specific and fail immediately.
+    configured = [GEMINI_MODEL, *(m for m in GEMINI_FALLBACK_MODELS if m != GEMINI_MODEL)]
+    models = [m for m in configured if _available(m)]
+    if not models:
+        raise LLMUnavailable("All Gemini models are temporarily unavailable", 503)
     for index, model in enumerate(models):
         try:
             return _call(model, payload)
         except LLMUnavailable as exc:
-            transient = exc.status_code is None or exc.status_code >= 500
-            if not transient or exc.unexpected or index == len(models) - 1:
+            busy = (exc.status_code is None or exc.status_code >= 500) and not exc.unexpected
+            if exc.model_quota:
+                _bench(model, exc.retry_after or QUOTA_COOLDOWN_DEFAULT)
+            elif busy:
+                _bench(model, BUSY_COOLDOWN_SECONDS)
+            if not (busy or exc.model_quota) or index == len(models) - 1:
                 raise
             log.warning("Gemini model %s unavailable; trying %s", model, models[index + 1])
+
+
+def _quota_error(response):
+    """429 details: (model-specific?, retry delay in seconds). Body not logged."""
+    # The body is untrusted and may have any shape: never let parsing raise.
+    try:
+        body = response.json()
+    except ValueError:
+        return False, None
+    error = body.get("error") if isinstance(body, dict) else None
+    details = error.get("details") if isinstance(error, dict) else None
+    per_model, delay = False, None
+    for detail in details if isinstance(details, list) else []:
+        if not isinstance(detail, dict):
+            continue
+        violations = detail.get("violations")
+        for violation in violations if isinstance(violations, list) else []:
+            if isinstance(violation, dict) and "PerModel" in str(violation.get("quotaId", "")):
+                per_model = True
+        match = re.fullmatch(r"(\d+(?:\.\d+)?)s", str(detail.get("retryDelay", "")))
+        if match:
+            delay = min(QUOTA_COOLDOWN_MAX, float(match.group(1)))
+    return per_model, delay
 
 
 def _call(model: str, payload: dict) -> dict:
@@ -94,10 +157,13 @@ def _call(model: str, payload: dict) -> dict:
 
         if response.status_code >= 400:
             # Provider error bodies can echo request data; log the status only.
-            log.warning("Gemini returned HTTP %s", response.status_code)
-            raise LLMUnavailable(
+            log.warning("Gemini returned HTTP %s for %s", response.status_code, model)
+            error = LLMUnavailable(
                 f"Gemini error {response.status_code}", response.status_code
             )
+            if response.status_code == 429:
+                error.model_quota, error.retry_after = _quota_error(response)
+            raise error
 
         data = response.json()
 

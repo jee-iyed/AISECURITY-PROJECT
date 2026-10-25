@@ -18,6 +18,15 @@ from app.db.database import Base, engine
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def reset_gemini_model_health():
+    from app.llm import gemini_client
+
+    gemini_client.reset_model_health()
+    yield
+    gemini_client.reset_model_health()
+
+
 @pytest.fixture()
 def client():
     from app.core import rate_limit
