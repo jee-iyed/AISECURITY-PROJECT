@@ -23,8 +23,13 @@ def approvals(user: User = Depends(admin_user), db: Session = Depends(get_db)):
             "arguments": json.loads(a.arguments),
             "status": a.status,
             "created_at": a.created_at,
-            "risk_score": 65,
-            "reason": "Course-wide room change requires human review.",
+            "risk_score": a.risk_score if a.risk_score is not None else 65,
+            "reason": a.reason or "Course-wide room change requires human review.",
+            "expires_at": a.expires_at,
+            "reviewer_id": a.reviewer_id,
+            "reviewed_at": a.reviewed_at,
+            "executed_at": a.executed_at,
+            "arguments_hash": (a.arguments_hash or "")[:12],
         }
         for a, u in db.execute(
             select(Approval, User)

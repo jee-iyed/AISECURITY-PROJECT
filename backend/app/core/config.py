@@ -17,3 +17,7 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 DEMO_DATA = Path(os.getenv("DEMO_DATA_DIR", "../demo-data"))
 LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+# Human approval: pending requests expire; separation of duties is optional
+# because the demo seeds a single administrator.
+APPROVAL_TTL_MINUTES = int(os.getenv("APPROVAL_TTL_MINUTES", "30"))
+REQUIRE_DISTINCT_APPROVER = os.getenv("REQUIRE_DISTINCT_APPROVER", "false").lower() == "true"

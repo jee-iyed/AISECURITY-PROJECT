@@ -6,12 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import approvals, auth, chat, security
 from app.core.config import GEMINI_API_KEY
 from app.db.database import Base, SessionLocal, engine
+from app.db.migrate import upgrade
 from app.db.seed import seed
 
 
 @asynccontextmanager
 async def lifespan(app):
     Base.metadata.create_all(engine)
+    upgrade(engine, Base.metadata)
     with SessionLocal() as db:
         seed(db)
     yield

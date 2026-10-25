@@ -162,6 +162,7 @@ def evaluate(
     mandatory_redact: bool = False,
     reason: str | None = None,
     threat: str | None = None,
+    deny_rule: str = "DENY_UNAUTHORIZED_ACTION",
     policy: RiskPolicy = DEFAULT_POLICY,
 ) -> dict:
     """Score the signals, then apply mandatory rules in priority order.
@@ -214,7 +215,7 @@ def evaluate(
     primary = threat or (threats[0] if threats else None)
 
     if authorization_denied:
-        decision, rule = "BLOCK", "DENY_UNAUTHORIZED_ACTION"
+        decision, rule = "BLOCK", deny_rule
     elif invalid_arguments:
         decision, rule = "BLOCK", "DENY_INVALID_ARGUMENTS"
     elif mandatory_block:

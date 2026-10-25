@@ -65,6 +65,12 @@ class SecurityEvent(Base):
     decision: Mapped[str]
     tool_name: Mapped[str | None]
     reason: Mapped[str]
+    correlation_id: Mapped[str | None]
+    source: Mapped[str | None]
+    policy_rules: Mapped[str | None] = mapped_column(Text)  # JSON list
+    signals: Mapped[str | None] = mapped_column(Text)  # JSON list, redacted
+    approval_id: Mapped[int | None]
+    outcome: Mapped[str | None]
 
 
 class Approval(Base):
@@ -77,3 +83,10 @@ class Approval(Base):
     created_at: Mapped[str] = mapped_column(default=now)
     reviewed_at: Mapped[str | None]
     reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    expires_at: Mapped[str | None]
+    arguments_hash: Mapped[str | None]
+    risk_score: Mapped[int | None]
+    reason: Mapped[str | None]
+    correlation_id: Mapped[str | None]
+    executed_at: Mapped[str | None]
+    result: Mapped[str | None] = mapped_column(Text)
