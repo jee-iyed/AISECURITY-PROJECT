@@ -67,3 +67,24 @@ def declarations_for(role):
         for name, schema in SCHEMAS.items()
         if permitted(role, name)
     ]
+
+
+def inventory():
+    """Security inventory of every tool the model can propose."""
+    from app.core.permissions import PERMISSIONS
+    from app.tools.policies import TOOL_POLICIES
+
+    return [
+        {
+            "name": name,
+            "description": DESCRIPTIONS[name],
+            "arguments_schema": schema.model_json_schema(),
+            "roles": sorted(r for r, tools in PERMISSIONS.items() if name in tools),
+            "operation": TOOL_POLICIES[name].operation,
+            "sensitivity": TOOL_POLICIES[name].sensitivity,
+            "resources": TOOL_POLICIES[name].resources,
+            "resource_rule": TOOL_POLICIES[name].resource_rule,
+            "requires_approval": TOOL_POLICIES[name].requires_approval,
+        }
+        for name, schema in SCHEMAS.items()
+    ]

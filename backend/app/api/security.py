@@ -6,6 +6,7 @@ from app.core.auth import admin_user
 from app.db.database import get_db
 from app.db.models import SecurityEvent, User
 from app.security.security_analyzer import explain
+from app.tools.registry import inventory
 
 router = APIRouter(prefix="/security")
 
@@ -41,3 +42,8 @@ def analysis(
     if not event:
         raise HTTPException(404, "Event not found")
     return explain(event)
+
+
+@router.get("/tools")
+def tools(user: User = Depends(admin_user)):
+    return inventory()
