@@ -13,14 +13,17 @@ The model proposes; Python authorizes. User statements never establish identity.
 
 ## 4. Architecture
 ```text
-User → JWT authentication → Input Guard → Risk Engine → allow/block
-  → Gemini or deterministic demo selector → single assistant
-    → text → Output Guard → user
-    → tool proposal → Tool Guard → allowlist + RBAC + argument/resource checks
-      → read tool → Context Guard → final answer → Output Guard → user
-      → sensitive write → approval queue → human review
-        → revalidate original user's permissions and resource → execute once
-Every chat decision and approval review → SQLite event + JSONL audit metadata
+User → JWT authentication (role from DB) → rate limit
+  → Input Guard (normalize → 8 detectors → framing) → Risk Engine → BLOCK or continue
+  → Gemini or deterministic demo selector (proposes text or one tool call)
+    → text → Output Guard (REDACT / BLOCK) → user
+    → tool proposal → Tool Guard: allowlist + RBAC → strict schema → taint check
+        → resource authorization → business rules → approval requirement
+      → READ tool executes → Context Guard (provenance, quarantine, taint)
+          → untrusted-data envelope → Gemini summary → Output Guard → user
+      → WRITE tool → approval stored (hash, expiry) → human review
+          → atomic claim → revalidate as requester → exact-match → execute once
+Every decision → SQLite event + JSONL audit (correlation id, rules, signals)
 ```
 External files AND database tool results are treated as untrusted content. Model output never has direct access to the database or filesystem. No shell, arbitrary file reader, role-changing, deletion, or external network tool exists.
 
@@ -128,28 +131,28 @@ POST `/api/auth/login` accepts JSON email/password and returns a two-hour HS256 
 Central policy lives in `core/permissions.py`. Students read their class schedule, professors their own courses and class lists. Admin-only APIs enforce authorization separately from UI visibility.
 
 ## 19. Input Guard
-Unicode normalization plus contextual regex rules detect override requests, role manipulation, jailbreaks, system prompt extraction, and private-data requests in common English/French examples. The downstream tool allowlist, typed arguments, and ownership checks remain effective even when injection detection misses an attack. No optional LLM classifier is required for this prototype.
+Multilayer and deterministic (no LLM call): secure normalization (NFKC, invisible/control characters, homoglyphs, leetspeak, separator obfuscation, bounded base64/hex/percent/ROT13 decoding, size limits; the original text is kept for audit) → eight French/English detectors (signatures, obfuscation, instruction override, role manipulation, jailbreak, sensitive information, tool manipulation, trust boundary) returning structured signals → mention-versus-use analysis so pedagogical questions about attacks are not blocked → central Risk Engine. Details and every weight: `docs/risk-model.md`. Measured performance on a held-out set: `docs/benchmark.md`. Detection is a heuristic early layer; authorization never depends on it.
 
 ## 20. Context Guard
-Checks all file/database tool results before they enter the model. The malicious note contains an instruction override and is blocked as INDIRECT_PROMPT_INJECTION. Normal sources remain explicitly untrusted. The guard blocks rather than attempting unreliable instruction removal.
+Every tool result gets provenance (`source_id`, type, `trust_level: untrusted`, owner, retrieval time). Database rows are untrusted too. The same detectors run with the source marked untrusted (threat = INDIRECT_PROMPT_INJECTION, higher source-trust weight), plus exfiltration (markdown images, URL templates, "send to …") and hidden-markup detectors. High-risk content is quarantined and never sent to the model. Any instruction-like signal *taints* the turn: write tools are refused until a new user request (`DENY_TAINTED_CONTEXT_ACTION`). Content handed to Gemini is wrapped in an untrusted-data envelope with escaped delimiters.
 
 ## 21. Output Guard
-Redacts password/token/key assignments, token-like strings, email addresses, and phone-like values, and blocks confidential markers. Data minimization and scoped tools are the primary controls against out-of-scope institutional data; arbitrary generated personal data cannot be reliably identified by regex. Even authorized demo email addresses are redacted in chat.
+Redacts credentials (private keys, JWT, Google `AIza…`/`AQ.…`, OpenAI/Stripe-style keys, GitHub, AWS, Slack, Argon2/bcrypt hashes, bearer tokens, credentialed URLs, `password=`-style assignments) and personal data (email, phone, IBAN, Luhn-valid cards, French NIR) with typed labels, keeping the rest of the answer. Emails are contextual: a user's own address and, for administrators, institutional addresses are shown. BLOCK only for confidential markers, system-prompt leakage (8-word shingle match) or bulk credential dumps. Logs use the same masking. Masking never replaces authorization: forbidden tools are refused before execution.
 
 ## 22. Tool Guard
-Checks tool existence, deterministic role permission, Pydantic arguments, ownership, room allowlist, current resource state, schedule conflicts, and approval requirement. There is no execution endpoint that bypasses this pathway. Unknown or destructive tools are denied by default.
+Order: allowlist + RBAC → strict Pydantic schema (no extra fields, strict integers, bounded ids, name-only search queries, date horizon) → trust boundary (tainted turn) → resource authorization (ownership, known rooms) → business constraints (stale room, conflicts) → approval requirement. Each tool's role, READ/WRITE type, sensitivity, resources and approval need are declared in `app/tools/policies.py` and served to admins at `GET /api/security/tools` (`docs/tool-inventory.md`). Unknown tools are denied by default.
 
 ## 23. Risk Engine
-Scores are educational fixed policy values, not calibrated probabilities: LOW 0–29, MEDIUM 30–59, HIGH 60–84, CRITICAL 85–100. Examples: normal 10; redacted output 50; authorized sensitive write 65; indirect injection 80; instruction override 88; unauthorized tool 95. Authorized writes use REQUIRE_APPROVAL rather than automatic execution even though their risk is high.
+`app/security/risk_engine.py`: noisy-OR combination of detector signals weighted by threat severity, tool/resource impact, source trust and recent history, bounded 0–100 and deterministic. Mandatory policy rules decide before the score: authorization denied → BLOCK, invalid arguments → BLOCK, protected data → BLOCK, score ≥ 60 → BLOCK, sensitive operation → REQUIRE_APPROVAL (even at low score), secrets → REDACT. Each result lists `signals`, `threats`, `severity` and `policy_rules`. Weights are documented heuristics, not calibrated probabilities. Levels: LOW 0–29, MEDIUM 30–59, HIGH 60–84, CRITICAL 85–100.
 
 ## 24. Human approval
-Admin proposes an exact room change; stored JSON arguments remain immutable to reviewers. Admin-only approve/reject APIs atomically claim PENDING items. Approval revalidates the original requester's current role, arguments, course state, and conflicts, then commits the write and audit event. Replays return 409. Rejection never executes. In this simple academic model an admin may review their own request; separation of duties and expiry are future improvements.
+ADMIN request → Tool Guard validation → approval stored with canonical arguments, a SHA-256 integrity hash (requester + tool + arguments), risk, reason and expiry (30 min by default). Review: admin only and rate-limited; atomic PENDING→REVIEWING claim (conditional UPDATE; the SQLite write lock is held until the execution and audit commit together, so concurrent reviewers get 409); expired → 410 and EXPIRED; hash mismatch → BLOCKED; full revalidation as the original requester; the executed arguments must equal the approved ones; reviewer id, review time, execution time and result are stored. A failure before commit rolls the claim back to PENDING. Separation of duties (`REQUIRE_DISTINCT_APPROVER=true`) is available but off by default because the demo seeds one administrator.
 
 ## 25. Security logging
-Each chat outcome and approval review persists timestamp, identity, role, redacted preview, threat, score, level, decision, tool, reason in SQLite. JSONL contains only metadata, without prompts or results. File logging and SQLite are not a distributed transaction; this small single-process demonstration does not guarantee tamper-resistant audit delivery. Dashboard and queue show the latest 500 records; counters describe that window, including approval review events.
+SQLite events store identity, role, redacted prompt preview, threat, score, level, decision, tool, reason, correlation id, source, policy rules, detector signals (no excerpts), approval id and outcome. The JSONL audit log (`EVT-…` ids) stores metadata only, never prompts. Existing databases are upgraded in place by an additive migration. Files and SQLite are not a distributed transaction and are not tamper-evident.
 
-## 26. AI Security Analyzer
-Admin-only GET `/api/security/events/{id}/analysis` returns threat, explanation, recommendation, and advisory_only=true. Demo mode uses a deterministic explanation; Gemini mode optionally explains minimized event metadata. It cannot alter decisions or execute actions.
+## 26. AI-assisted incident analysis
+Admin-only `GET /api/security/events/{id}/analysis` always returns a deterministic analysis (incident id, threat, severity, decision, summary, recommendations). With a key, Gemini may add an advisory summary from structured metadata only (the raw prompt is never sent), without tools, with a Pydantic-validated JSON reply that is redacted and labelled as AI analysis, not evidence. One call per event (cached); after a 429/timeout/malformed reply AI analysis pauses for a cooldown instead of retrying. It cannot change decisions, scores, permissions or approvals.
 
 ## 27. Threat model
 Assets include authentication, roles, student/professor data, schedules, LLM context, tools, and configuration. Attackers include malicious authenticated users and poisoned external content. Controls enforce trust boundaries at authentication, model input/output, tool invocation, and human-approved writes. See `docs/threat-model.md` for the threat/control mapping and residual risks.
@@ -192,19 +195,17 @@ docker compose run --rm -v "D:\AI Security Gateway\backend\tests:/app/tests" -v 
 Tests explicitly isolate SQLite and logs under work; they never reset the application's real demo database. Coverage includes all required scenarios, role integrity, invalid JWTs, resource ownership, path traversal, extra argument rejection, approval replay/rejection/revalidation, guards, scoring, and logging.
 
 ## 30. Limitations
-- Prompt Injection detection is not perfect; regex/rules are educational and evadable.
-- An LLM classifier is not a reliable security boundary by itself.
-- Backend code must enforce RBAC. The LLM must never choose its privileges.
-- Tool calls must always be validated before execution; sensitive actions require human approval.
-- Real secrets must never enter prompts; log redaction cannot identify arbitrary unknown secrets.
-- All demonstration data is fictional; this prototype is not production-ready.
-- Public demo credentials, Vite development server, no login rate limiting, no token revocation, no approval expiry, and no separate reviewer requirement are deliberate academic limits.
-- No comprehensive multilingual, encoded, or adversarial content detection; no claim of complete output privacy filtering.
-- This is not a general scheduling system; class-based enrollment and course-wide rooms simplify the use case.
-- Live Gemini execution needs a key and network access; deterministic tests cannot prove provider availability.
+- Detection is heuristic (patterns + framing). The held-out benchmark shows recall 0.667 and FPR 0.067; paraphrases without trigger words and languages other than French/English are missed. See `docs/benchmark.md`.
+- The dataset and the detectors were written by the same author; results are optimistic.
+- Authorization, approval and taint rules are deterministic and are the real boundary; they held in every end-to-end simulation, but they only cover the tools that exist.
+- Rate limits are in-memory, per process. No token revocation (logout is client-side). Public demo credentials. Vite development server in the frontend container.
+- Separation of duties exists but is off by default (single seeded admin).
+- Output filtering cannot recognise arbitrary unknown secrets or all personal data.
+- Audit logs are not tamper-evident. SQLite only.
+- Live Gemini behaviour needs a key and network access; automated tests use mocks.
 
 ## 31. Future improvements
-Independent reviewers, approval expiry, rate limiting, HTTPS deployment, secure HttpOnly cookies, secret management, richer enrollment, explicit session-level edits, migrations, model response evaluation, and stronger audit integrity. Add these only if the academic scope expands. No Kubernetes, Kafka, Redis, microservices, vector database, or heavy agent framework is needed.
+Independent red-team dataset, optional ML classifier evaluated against the same benchmark, HttpOnly cookies and token revocation, shared rate-limit store for multiple workers, tamper-evident audit log, production frontend build behind a reverse proxy with HTTPS.
 
 ## API reference
 | Method | Path | Access |
@@ -219,10 +220,11 @@ Independent reviewers, approval expiry, rate limiting, HTTPS deployment, secure 
 | GET | /api/approvals | ADMIN |
 | POST | /api/approvals/{id}/approve | ADMIN |
 | POST | /api/approvals/{id}/reject | ADMIN |
+| GET | /api/security/tools | ADMIN; tool security inventory |
 
 ## Version control
 A local Git repository can be initialized here. `.env`, local JWT secret, database, logs, dependencies, and scratch work are ignored. No GitHub repository or remote is created without a chosen destination. Before publishing inspect `git status` and never add real credentials.
 
 ## Validation results
 
-52 tests passed on Windows and inside the Python 3.12 Docker container. Both Docker images built, Compose started, all ten live HTTP scenarios passed, and SQLite/log persistence was verified. See `docs/validation.md` for evidence and the live Gemini limitation.
+See `docs/security-hardening-report.md` (audit, changes, test and benchmark results, limitations, demo scenarios). Benchmark: `cd backend; .\.venv\Scripts\python.exe -m benchmark.run`.

@@ -20,6 +20,9 @@ from app.main import app
 
 @pytest.fixture()
 def client():
+    from app.core import rate_limit
+
+    rate_limit.reset()
     Base.metadata.drop_all(engine)
     with TestClient(app) as client:
         yield client

@@ -33,6 +33,8 @@ os.environ.update(
     LOG_DIR=str(_tmp / "logs"),
     DATABASE_URL="sqlite:///" + str(_tmp / "bench.db").replace("\\", "/"),
     GEMINI_API_KEY="",
+    # The end-to-end run sends hundreds of requests per account on purpose.
+    RATE_LIMIT_ENABLED="false",
     JWT_SECRET="benchmark-only-secret-with-at-least-32-chars",
     DEMO_DATA_DIR=str(ROOT.parents[1] / "demo-data"),
 )

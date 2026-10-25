@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import admin_user
+from app.core.rate_limit import enforce
 from app.db.database import get_db
 from app.db.models import Approval, User
 from app.services.approval_service import review
@@ -44,6 +45,7 @@ def approvals(user: User = Depends(admin_user), db: Session = Depends(get_db)):
 def approve(
     approval_id: int, user: User = Depends(admin_user), db: Session = Depends(get_db)
 ):
+    enforce("review", str(user.id))
     return review(db, user, approval_id, True)
 
 
@@ -51,4 +53,5 @@ def approve(
 def reject(
     approval_id: int, user: User = Depends(admin_user), db: Session = Depends(get_db)
 ):
+    enforce("review", str(user.id))
     return review(db, user, approval_id, False)

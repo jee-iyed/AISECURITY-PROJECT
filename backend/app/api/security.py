@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import admin_user
+from app.core.rate_limit import enforce
 from app.db.database import get_db
 from app.db.models import SecurityEvent, User
 from app.security.security_analyzer import explain
@@ -41,6 +42,7 @@ def analysis(
     event = db.get(SecurityEvent, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
+    enforce("analysis", str(user.id))
     return explain(event)
 
 

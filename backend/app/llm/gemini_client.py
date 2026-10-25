@@ -3,6 +3,7 @@ from datetime import date
 
 import httpx
 
+from app.core import rate_limit
 from app.core.config import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT_SECONDS
 from app.llm.system_prompt import SYSTEM_PROMPT
 
@@ -27,6 +28,13 @@ def generate(
     declarations: list | None = None,
     generation_config: dict | None = None,
 ) -> dict:
+    try:
+        # Process-wide budget protects the quota from bursts; exceeding it is
+        # handled exactly like a provider 429 (fail closed, no retry).
+        rate_limit.check("gemini", "global")
+    except rate_limit.RateLimited as exc:
+        raise LLMUnavailable("Local Gemini call budget exhausted", 429) from exc
+
     payload = {
         "systemInstruction": {
             "parts": [
