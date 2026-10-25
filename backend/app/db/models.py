@@ -71,6 +71,7 @@ class SecurityEvent(Base):
     signals: Mapped[str | None] = mapped_column(Text)  # JSON list, redacted
     approval_id: Mapped[int | None]
     outcome: Mapped[str | None]
+    guard: Mapped[str | None]  # control that produced the decision
 
 
 class Approval(Base):

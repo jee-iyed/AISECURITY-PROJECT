@@ -16,7 +16,7 @@ SECRETS = {
     "google": "AIzaSyD-FAKEFAKEFAKEFAKEFAKEFAKEFAKE12",
     "google_new": "AQ.FakeFakeFakeFakeFakeFake_1234",
     "openai": "sk-proj-FAKEfakeFAKEfakeFAKEfake1234",
-    "github": "ghp_FAKEfakeFAKEfakeFAKEfakeFAKEfake1234",
+    "github": "ghp_FAKEfakeFAKEfakeFAKEfakeFAKEfake1234",  # gitleaks:allow (synthetic test value)
     "aws": "AKIAFAKEFAKEFAKE1234",
     "argon": "$argon2id$v=19$m=65536,t=3,p=4$ZmFrZXNhbHQ$ZmFrZWhhc2g",
     "jwt": FAKE_JWT,

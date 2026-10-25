@@ -61,6 +61,7 @@ def record(
         signals=json.dumps(_audit_signals(security)),
         approval_id=approval_id,
         outcome=outcome,
+        guard=security.get("guard"),
         **{
             k: security[k]
             for k in ["threat_type", "risk_score", "risk_level", "decision", "reason"]
@@ -89,6 +90,7 @@ def record(
                     "source": source,
                     "approval_id": approval_id,
                     "outcome": outcome,
+                    "guard": security.get("guard"),
                 }
             )
             + "\n"

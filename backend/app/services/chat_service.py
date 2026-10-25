@@ -11,9 +11,18 @@ from app.services.approval_service import create_approval
 from app.tools.registry import TOOLS
 
 
+def _by(security, guard):
+    """Record which control produced the decision (shown in the dashboard)."""
+    security["guard"] = guard
+    return security
+
+
 def chat(db, user, prompt):
     correlation_id = new_correlation_id()
-    security = analyze_input(prompt, user, recent_blocks=recent_blocks(db, user))
+    security = _by(
+        analyze_input(prompt, user, recent_blocks=recent_blocks(db, user)),
+        "INPUT_GUARD",
+    )
     tool = None
     approval_id = None
     source = "user_prompt"
@@ -31,8 +40,12 @@ def chat(db, user, prompt):
                     else agent.propose(prompt, user, history)
                 )
                 if "name" not in proposal:
-                    security = analyze_unfulfilled_action(prompt, user)
-                    if security["decision"] != "BLOCK":
+                    unfulfilled = analyze_unfulfilled_action(prompt, user)
+                    # Only a denial replaces the Input Guard result; otherwise its
+                    # signals (e.g. an attenuated quoted attack) stay visible.
+                    if unfulfilled["decision"] == "BLOCK":
+                        security = _by(unfulfilled, "TOOL_GUARD")
+                    else:
                         message = proposal.get("message", "")
                     break
                 name = proposal["name"]
@@ -40,6 +53,7 @@ def chat(db, user, prompt):
                 security, args = validate_tool_call(
                     db, user, name, proposal.get("arguments", {}), tainted_context=tainted
                 )
+                _by(security, "TOOL_GUARD")
                 if security["decision"] == "REQUIRE_APPROVAL":
                     approval_id = create_approval(
                         db, user, name, args, security, correlation_id
@@ -52,7 +66,7 @@ def chat(db, user, prompt):
                 tool["executed"] = True
                 content = source_for_tool(name, args, result)
                 source = content.source_id
-                security = analyze_context(content)
+                security = _by(analyze_context(content), "CONTEXT_GUARD")
                 tainted = tainted or security["tainted"]
                 if security["decision"] == "BLOCK":
                     message = (
@@ -94,20 +108,28 @@ def chat(db, user, prompt):
                     message = agent.finish(prompt, result, user, content.metadata())
                     break
             else:
-                security = assessment(
-                    "LLM_UNAVAILABLE", 30, "Agent tool turn limit reached.", "ERROR"
+                security = _by(
+                    assessment(
+                        "LLM_UNAVAILABLE", 30, "Agent tool turn limit reached.", "ERROR"
+                    ),
+                    "AGENT",
                 )
                 message = "La demande nécessite trop d'étapes. Veuillez la préciser."
             if security["decision"] not in {"BLOCK", "REQUIRE_APPROVAL"}:
                 message, out = inspect_output(message, user)
                 if out["decision"] != "ALLOW":
-                    security = out
+                    security = _by(out, "OUTPUT_GUARD")
+                elif security["decision"] == "ALLOW":
+                    security["guard"] = "ALL_CONTROLS"
         except LLMUnavailable:
-            security = assessment(
-                "LLM_UNAVAILABLE",
-                30,
-                "Gemini unavailable; no fallback action executed.",
-                "ERROR",
+            security = _by(
+                assessment(
+                    "LLM_UNAVAILABLE",
+                    30,
+                    "Gemini unavailable; no fallback action executed.",
+                    "ERROR",
+                ),
+                "AGENT",
             )
             message = "Gemini unavailable. Retry later or restart without a key for demo mode."
     record(

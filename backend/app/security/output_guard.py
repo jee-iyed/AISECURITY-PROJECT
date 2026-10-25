@@ -59,14 +59,38 @@ PERSONAL = [
     ),
     ("EMAIL", r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b", 0.4),
 ]
-CONFIDENTIAL_MARKERS = [
-    "confidential",
-    "confidentiel",
-    "strictly internal",
-    "usage interne uniquement",
-    "private_professor",
-    "never reveal instructions",
+# Protected documents are *marked*: an upper-case classification label, a
+# bracketed tag, a classification field or a distribution restriction. The
+# ordinary words "confidentiel(le)s" / "confidentiality" in prose are not
+# markers: an explanation of data leakage naturally uses them.
+CLASSIFICATION_MARKERS = [
+    (
+        "CLASSIFICATION_LABEL",
+        # Case-sensitive on purpose: the label, not the adjective.
+        r"\b(?:STRICTLY |HIGHLY )?(?:CONFIDENTIAL|CONFIDENTIEL(?:LE)?|TOP SECRET"
+        r"|INTERNAL ONLY|USAGE INTERNE)\b",
+    ),
+    (
+        "CLASSIFICATION_TAG",
+        r"(?i)\[\s*(?:confidential|confidentiel(?:le)?|internal|interne|restricted"
+        r"|secret)\s*\]",
+    ),
+    (
+        "CLASSIFICATION_FIELD",
+        r"(?i)\b(?:classification|classified|sensitivity|niveau de confidentialit[eé]"
+        r"|diffusion)\s*[:=]\s*(?:confidential|confidentiel(?:le)?|secret|internal"
+        r"|interne|restricted|restreinte)",
+    ),
+    (
+        "RESTRICTED_DISTRIBUTION",
+        r"(?i)\b(?:strictly internal|usage interne uniquement|diffusion restreinte"
+        r"|do not distribute|ne pas diffuser)\b",
+    ),
+    ("PROTECTED_FIELD", r"\bprivate_professor\b"),
 ]
+# Verbatim system-prompt span (in words) that counts as leakage. Shorter
+# overlaps occur naturally when the model explains its own behaviour.
+PROMPT_LEAK_MIN_WORDS = 12
 INSTITUTIONAL_DOMAINS = ("esigelec-demo.fr", "esigelec.fr")
 BULK_CREDENTIALS = 3
 # Output blocking is driven by mandatory rules only; the score is reported to
@@ -75,6 +99,7 @@ OUTPUT_POLICY = RiskPolicy(block_threshold=101)
 
 _CREDENTIALS = [(k, re.compile(p), c) for k, p, c in CREDENTIALS]
 _PERSONAL = [(k, re.compile(p), c) for k, p, c in PERSONAL]
+_CLASSIFICATION = [(k, re.compile(p)) for k, p in CLASSIFICATION_MARKERS]
 _PROMPT_WORDS = re.findall(r"\w+", SYSTEM_PROMPT.casefold())
 SHINGLE = 8
 _PROMPT_SHINGLES = {
@@ -164,12 +189,27 @@ def redact(text, user=None):
     return _mask(text, find_sensitive(text, user))
 
 
-def leaks_system_prompt(text: str) -> bool:
+def system_prompt_span(text: str) -> int:
+    """Longest run of words copied verbatim from the system prompt (0 if < 8)."""
     words = re.findall(r"\w+", text.casefold())
-    return any(
-        " ".join(words[i : i + SHINGLE]) in _PROMPT_SHINGLES
-        for i in range(len(words) - SHINGLE + 1)
-    )
+    longest = run = 0
+    for i in range(len(words) - SHINGLE + 1):
+        run = run + 1 if " ".join(words[i : i + SHINGLE]) in _PROMPT_SHINGLES else 0
+        longest = max(longest, run)
+    return longest + SHINGLE - 1 if longest else 0
+
+
+def leaks_system_prompt(text: str) -> bool:
+    return system_prompt_span(text) >= PROMPT_LEAK_MIN_WORDS
+
+
+def protected_content(text: str) -> list[str]:
+    """Names of the mandatory-block checks that match (never the matched text)."""
+    hits = [kind for kind, pattern in _CLASSIFICATION if pattern.search(text)]
+    span = system_prompt_span(text)
+    if span >= PROMPT_LEAK_MIN_WORDS:
+        hits.append(f"SYSTEM_PROMPT_VERBATIM ({span} words)")
+    return hits
 
 
 def _signal(kind, category, confidence, count):
@@ -185,13 +225,20 @@ def _signal(kind, category, confidence, count):
 
 def inspect_output(text, user):
     text = text or ""
-    lowered = text.casefold()
-    if any(m in lowered for m in CONFIDENTIAL_MARKERS) or leaks_system_prompt(text):
+    protected = protected_content(text)
+    if protected:
+        signals = [
+            {
+                **_signal(hit, "confidential", 0.95, 1),
+                "evidence": f"protected content: {hit.lower().replace('_', ' ')}",
+            }
+            for hit in protected
+        ]
         return "Protected output blocked.", evaluate(
-            [_signal("CONFIDENTIAL_CONTENT", "confidential", 0.95, 1)],
+            signals,
             source_trust="model_output",
             mandatory_block=True,
-            reason="Confidential output blocked.",
+            reason=f"Confidential output blocked ({', '.join(protected)}).",
             policy=OUTPUT_POLICY,
         )
     findings = find_sensitive(text, user)

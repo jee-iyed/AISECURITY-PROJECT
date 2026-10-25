@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { api } from "./services/api";
 import EsigelecBrand from "./components/EsigelecBrand";
+const GUARDS = {
+  INPUT_GUARD: "Input Guard",
+  CONTEXT_GUARD: "Context Guard",
+  TOOL_GUARD: "Tool Guard / RBAC",
+  OUTPUT_GUARD: "Output Guard",
+  HUMAN_APPROVAL: "Human approval",
+  AGENT: "Agent / Gemini",
+  ALL_CONTROLS: "All controls passed",
+};
+function guardLabel(guard) {
+  return guard ? GUARDS[guard] || guard : "—";
+}
 function Badge({ children }) {
   return (
     <span className={"badge " + String(children).toLowerCase()}>
@@ -305,6 +317,7 @@ export default function App() {
                 ["Threat", security?.threat_type || "None detected"],
                 ["Risk", security?.risk_level || "Awaiting request"],
                 ["Decision", security?.decision || "—"],
+                ["Decided by", guardLabel(security?.guard)],
                 ["Tool", last?.tool?.name || "None"],
                 ["Policy rule", security?.policy_rules?.join(", ") || "—"],
                 [
@@ -409,6 +422,7 @@ export default function App() {
                         "Threat",
                         "Risk",
                         "Decision",
+                        "Decided by",
                         "Tool",
                         "Reason",
                         "Analysis",
@@ -430,6 +444,7 @@ export default function App() {
                         <td>
                           <Badge>{e.decision}</Badge>
                         </td>
+                        <td>{guardLabel(e.guard)}</td>
                         <td>{e.tool_name || "—"}</td>
                         <td className="reason" title={e.reason}>
                           {e.reason}

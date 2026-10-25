@@ -142,6 +142,7 @@ def review(db, reviewer, approval_id, approve):
                 decision="EXECUTED",
             )
             security["policy_rules"] = ["EXECUTE_APPROVED_ACTION"]
+    security["guard"] = "HUMAN_APPROVAL"
     # record() commits the status change and the tool effect in one transaction.
     record(
         db,

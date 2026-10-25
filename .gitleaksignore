@@ -1,0 +1,3 @@
+# Synthetic test credentials (literal "FAKE" values) committed before inline
+# allow comments were added. Real secrets must never be listed here.
+c60808cd937359bac30690cd7d0d60d678996dd3:backend/tests/test_output_guard_advanced.py:github-pat:19
