@@ -1,3 +1,5 @@
+> **Historical record** of the first prototype (16 October 2026, 52 tests). The current validation results are in `docs/security-hardening-report.md` and `README.md`.
+
 # Validation record — 16 October 2026
 
 ## Completed checks

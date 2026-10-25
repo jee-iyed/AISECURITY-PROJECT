@@ -12,6 +12,8 @@ Branch `codex/ai-security-gateway`, one commit per phase:
 | `0df89b1` | 5 — AI-assisted incident analysis |
 | `0521db1` | 6 — benchmark and evaluation |
 | `ca8acbe` | 7 — hardening, rate limiting, containers |
+| `89e00e1` | Gemini availability fix (overloaded model → `gemini-3.5-flash` + bounded fallback), rolling demo dates |
+| `b7588f8` | Output Guard false positive on pedagogical answers; deciding-guard attribution |
 
 ## 1. Initial audit
 
@@ -91,9 +93,22 @@ tool), and authorization always precedes execution.
 
 ## 4. Tests
 
-`.\.venv\Scripts\python.exe -m pytest -q` → **261 passed, 0 failed, 0 skipped**
-(74 original tests kept unchanged; one shared fixture now also resets the
-rate limiter). Ruff: all checks passed. Frontend: `vite build` passed.
+`.\.venv\Scripts\python.exe -m pytest -q` → **309 passed, 0 failed, 0 skipped**
+(74 original tests kept; one shared fixture now also resets the rate limiter;
+one transport test now disables the model fallback to keep its meaning).
+Ruff: all checks passed. Frontend: `vite build` passed.
+
+### Post-hardening fixes
+* **Gemini unavailable**: not a quota problem. The configured
+  `gemini-3.8-flash` returned 503 "high demand" or timed out; the key was
+  valid. Primary model is now `gemini-3.5-flash` with a bounded fallback list
+  (each model tried once on 503/5xx/timeout, never on 429).
+* **False positive**: the Output Guard blocked an explanation of prompt
+  injection because a case-insensitive substring list matched
+  "confidentielles". Replaced by classification-label detection and a
+  12-word verbatim system-prompt rule. The chat service also replaced the
+  Input Guard result by a generic write check on text answers; fixed, and
+  every decision now records its deciding guard.
 
 ## 5. Benchmark (held-out test split, n = 180; full details in `docs/benchmark.md`)
 
@@ -122,9 +137,9 @@ by detection; `/api/chat` p50 25.9 ms; 0 LLM calls by security controls.
 * Separation of duties implemented but off by default (single admin seeded).
 * Output filtering cannot find arbitrary secrets or all personal data.
 * Audit log not tamper-evident.
-* **Live Gemini not verified**: from the Docker run, one analysis request to
-  Gemini timed out after 30 s; the gateway fell back to the deterministic
-  analysis as designed. All Gemini-dependent tests use mocks.
+* Live Gemini depends on provider availability: `gemini-3.8-flash` was
+  overloaded on 25 October 2026; `gemini-3.5-flash` answered live chats in
+  8–10 s. All Gemini-dependent tests use mocks.
 
 ## 7. Commands
 
