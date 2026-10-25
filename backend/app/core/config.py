@@ -21,3 +21,7 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 # because the demo seeds a single administrator.
 APPROVAL_TTL_MINUTES = int(os.getenv("APPROVAL_TTL_MINUTES", "30"))
 REQUIRE_DISTINCT_APPROVER = os.getenv("REQUIRE_DISTINCT_APPROVER", "false").lower() == "true"
+GEMINI_TIMEOUT_SECONDS = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30"))
+# After a provider failure, AI incident analysis is skipped for this long
+# instead of retrying (no call loops, quota preserved).
+ANALYSIS_COOLDOWN_SECONDS = int(os.getenv("ANALYSIS_COOLDOWN_SECONDS", "60"))

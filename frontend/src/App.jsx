@@ -306,6 +306,7 @@ export default function App() {
                 ["Risk", security?.risk_level || "Awaiting request"],
                 ["Decision", security?.decision || "—"],
                 ["Tool", last?.tool?.name || "None"],
+                ["Policy rule", security?.policy_rules?.join(", ") || "—"],
                 [
                   "Tool status",
                   last?.tool
@@ -326,6 +327,16 @@ export default function App() {
                 {security?.reason ||
                   "Send a message to inspect the gateway decision."}
               </p>
+              {security?.signals?.length > 0 && (
+                <ul className="signals">
+                  {security.signals.slice(0, 4).map((s, i) => (
+                    <li key={i}>
+                      <strong>{s.detector}</strong> · {s.evidence} ·{" "}
+                      {s.confidence} ({s.framing})
+                    </li>
+                  ))}
+                </ul>
+              )}
               <small>
                 Rules are educational. Authorization is enforced in backend
                 code.
@@ -399,6 +410,7 @@ export default function App() {
                         "Risk",
                         "Decision",
                         "Tool",
+                        "Reason",
                         "Analysis",
                       ].map((x) => (
                         <th key={x}>{x}</th>
@@ -419,6 +431,9 @@ export default function App() {
                           <Badge>{e.decision}</Badge>
                         </td>
                         <td>{e.tool_name || "—"}</td>
+                        <td className="reason" title={e.reason}>
+                          {e.reason}
+                        </td>
                         <td>
                           <button
                             className="secondary"
@@ -450,10 +465,30 @@ export default function App() {
             {analysis && (
               <section className="card analysis">
                 <h3>
-                  Incident explanation <small>· Advisory only</small>
+                  {analysis.incident_id || "Incident"} ·{" "}
+                  {analysis.threat_type || "No threat"}{" "}
+                  <Badge>{analysis.decision}</Badge>{" "}
+                  <small>
+                    {analysis.severity} · score {analysis.risk_score}
+                    {analysis.tool ? ` · ${analysis.tool}` : ""}
+                  </small>
                 </h3>
-                <p>{analysis.explanation}</p>
-                <p>{analysis.recommendation}</p>
+                <p>{analysis.summary || analysis.explanation}</p>
+                {analysis.recommendations?.length ? (
+                  <ul>
+                    {analysis.recommendations.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>{analysis.recommendation}</p>
+                )}
+                <small>
+                  {analysis.analysis_source === "gemini"
+                    ? "AI analysis (Gemini) · "
+                    : "Deterministic analysis · "}
+                  AI status: {analysis.ai_status} · {analysis.disclaimer}
+                </small>
               </section>
             )}
           </>
@@ -482,6 +517,9 @@ export default function App() {
                   </h3>
                   <p>
                     {a.user} · {a.role} · Risk {a.risk_score}
+                    {a.expires_at &&
+                      a.status === "PENDING" &&
+                      ` · expires ${new Date(a.expires_at).toLocaleTimeString()}`}
                   </p>
                   <pre>{JSON.stringify(a.arguments, null, 2)}</pre>
                   <small>{a.reason}</small>
